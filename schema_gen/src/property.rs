@@ -15,10 +15,10 @@ pub struct Property {
     comment: Option<Text>,
 
     #[serde(rename = "schema:domainIncludes")]
-    domain: Option<Cardinality<Reference>>,
+    domain: Cardinality<Reference>,
 
     #[serde(rename = "schema:rangeIncludes")]
-    range: Option<Cardinality<Reference>>,
+    range: Cardinality<Reference>,
 
     #[serde(flatten)]
     extra: HashMap<String, Value>,

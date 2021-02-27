@@ -5,12 +5,7 @@ pub fn actual_type(t: &str) -> String {
 }
 
 /*
-pub fn doc(&self) -> String {
-    match &self.comment {
-        Some(t) => t.to_string(),
-        None => "".to_string(),
-    }
-}
+
 
 
 pub fn fn_name(&self) -> String {
