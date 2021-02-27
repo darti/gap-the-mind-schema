@@ -1,4 +1,5 @@
-use convert_case::{Case, Casing};
+use crate::class::Class;
+use crate::property::Property;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -38,49 +39,27 @@ impl fmt::Display for Text {
     }
 }
 
+impl Text {
+    pub fn escape(&self) -> String {
+        let s = self.to_string();
+
+        let idx = s.chars().nth(0).and_then(|c| c.to_digit(10));
+
+        if let Some(i) = idx {
+            let mut r = DIGITS[i as usize].to_owned();
+            r.push_str(&s[1..]);
+
+            return r.to_string();
+        }
+
+        s
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Reference {
     #[serde(rename = "@id")]
     pub id: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Class {
-    #[serde(rename = "@id")]
-    id: String,
-
-    #[serde(rename = "rdfs:label")]
-    label: Text,
-
-    #[serde(rename = "rdfs:subClassOf")]
-    parents: Option<Cardinality<Reference>>,
-
-    #[serde(rename = "rdfs:comment")]
-    comment: Option<Text>,
-
-    #[serde(flatten)]
-    extra: HashMap<String, Value>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Property {
-    #[serde(rename = "@id")]
-    id: String,
-
-    #[serde(rename = "rdfs:label")]
-    label: Text,
-
-    #[serde(rename = "rdfs:comment")]
-    comment: Option<Text>,
-
-    #[serde(rename = "schema:domainIncludes")]
-    domain: Option<Cardinality<Reference>>,
-
-    #[serde(rename = "schema:rangeIncludes")]
-    range: Option<Cardinality<Reference>>,
-
-    #[serde(flatten)]
-    extra: HashMap<String, Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -11,7 +11,7 @@ fn main() {
     let mut g = Generator::new(&s);
     g.generate();
 
-    let out = File::create("../schema_org/src/schema.rs").unwrap();
+    let out = File::create("./src/schema.rs").unwrap();
     let mut writer = BufWriter::new(out);
     writer.write_all(g.to_string().as_bytes()).unwrap();
 }

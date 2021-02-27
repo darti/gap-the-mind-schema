@@ -1,3 +1,5 @@
+use crate::class::Class;
+use crate::property::Property;
 use crate::return_types::actual_type;
 use crate::{Cardinality, Definition, Reference, Schema};
 use codegen::{Scope, Struct};
@@ -22,15 +24,12 @@ impl<'a> Generator<'a> {
         }
     }
 
-    fn gen_struct(&mut self, def: &Definition) {
-        let mut s = Struct::new(&def.type_name());
-
-        s.doc(&def.doc());
-        self.structs.borrow_mut().insert(def.id.clone(), s);
+    fn gen_struct(&mut self, c: &Class) {
+        self.structs.borrow_mut().insert(c.id.clone(), c.generate());
     }
 
-    fn gen_field(&self, def: &Definition) {
-        let mut field = codegen::Field::new(&def.fn_name(), self.return_type(&def.range));
+    fn gen_field(&self, p: &Property) {
+        /*let mut field = codegen::Field::new(&def.fn_name(), self.return_type(&def.range));
         field.doc(vec![&def.doc()]);
 
         let mut structs = self.structs.borrow_mut();
@@ -43,7 +42,7 @@ impl<'a> Generator<'a> {
             Some(Cardinality::Single(r)) => add_field(r),
             Some(Cardinality::Sequence(v)) => v.iter().for_each(add_field),
             _ => (),
-        };
+        };*/
     }
 
     pub fn return_type(&self, ty: &Option<Cardinality<Reference>>) -> String {
@@ -59,30 +58,21 @@ impl<'a> Generator<'a> {
     }
 
     pub fn generate(&mut self) {
-        let class_type = String::from("rdfs:Class");
-        let property_type = String::from("rdf:Property");
+        for d in &self.schema.graph {
+            if let Definition::Class(c) = d {
+                self.gen_struct(c);
+            }
+        }
 
-        self.schema
-            .graph
-            .iter()
-            .filter(|d| match &d.typ {
-                Cardinality::Single(t) => *t == class_type,
-                _ => false,
-            })
-            .for_each(|d| self.gen_struct(d));
-
-        self.schema
-            .graph
-            .iter()
-            .filter(|d| match &d.typ {
-                Cardinality::Single(t) => *t == property_type,
-                _ => false,
-            })
-            .for_each(|d| self.gen_field(d));
+        for d in &self.schema.graph {
+            if let Definition::Property(p) = d {
+                self.gen_field(p);
+            }
+        }
 
         let mut scope = self.scope.borrow_mut();
 
-        self.structs.borrow_mut().iter().for_each(|(k, s)| {
+        self.structs.borrow_mut().iter().for_each(|(_, s)| {
             scope.push_struct(s.clone());
         });
     }
