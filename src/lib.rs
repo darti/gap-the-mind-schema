@@ -1,3 +1,1 @@
-mod schema;
-
-pub use schema::*;
+include!(concat!(env!("OUT_DIR"), "/schema.rs"));
