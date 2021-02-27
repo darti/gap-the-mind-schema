@@ -51,7 +51,7 @@ impl<'a> Generator<'a> {
             Some(Cardinality::Sequence(v)) => {
                 let ss: Vec<String> = v.iter().map(|r| actual_type(&r.id)).collect();
 
-                return ss.join(",");
+                ss.join(",")
             }
             None => "()".to_string(),
         }

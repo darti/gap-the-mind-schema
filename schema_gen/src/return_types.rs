@@ -1,7 +1,7 @@
 pub fn actual_type(t: &str) -> String {
-    let ty = t.split(":").last().map(|r| format!("Option<{}>", r));
+    let ty = t.split(':').last().map(|r| format!("Option<{}>", r));
 
-    ty.unwrap_or("()".to_string())
+    ty.unwrap_or_else(|| "()".to_string())
 }
 
 /*
