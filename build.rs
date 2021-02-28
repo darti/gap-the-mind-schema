@@ -14,7 +14,7 @@ fn main() {
     g.generate();
 
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let out = out.join("schema").with_extension("rs");
+    let out = out.join("mod").with_extension("rs");
     let out = File::create(out).unwrap();
 
     let mut writer = BufWriter::new(out);

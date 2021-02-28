@@ -14,10 +14,10 @@ pub struct Property {
     #[serde(rename = "rdfs:comment")]
     comment: Option<Text>,
 
-    #[serde(rename = "schema:domainIncludes")]
+    #[serde(rename = "mod:domainIncludes")]
     domain: Cardinality<Reference>,
 
-    #[serde(rename = "schema:rangeIncludes")]
+    #[serde(rename = "mod:rangeIncludes")]
     range: Cardinality<Reference>,
 
     #[serde(flatten)]

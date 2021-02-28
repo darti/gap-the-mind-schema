@@ -1,6 +1,6 @@
-use crate::class::Class;
-use crate::property::Property;
 use crate::return_types::actual_type;
+use crate::schema::class::Class;
+use crate::schema::property::Property;
 use crate::{Cardinality, Definition, Reference, Schema};
 use codegen::{Scope, Struct};
 use std::cell::RefCell;

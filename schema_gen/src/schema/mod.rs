@@ -1,11 +1,18 @@
-use crate::class::Class;
-use crate::property::Property;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use url::Url;
+
+use class::Class;
+use property::Property;
+
+pub mod class;
+pub mod r#enum;
+mod enum_member;
+pub mod property;
 
 const DIGITS: [&str; 10] = [
     "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
@@ -63,24 +70,15 @@ pub struct Reference {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
+#[serde(tag = "@type")]
 pub enum Definition {
+    #[serde(rename = "rdf:Property")]
     Property(Property),
+    #[serde(rename = "rdfs:Class")]
     Class(Class),
 
-    RdfOther {
-        #[serde(rename = "@id")]
-        id: String,
-
-        #[serde(rename = "@type")]
-        rdf_type: Cardinality<String>,
-
-        #[serde(rename = "rdfs:label")]
-        label: Text,
-
-        #[serde(flatten)]
-        extra: HashMap<String, Value>,
-    },
+    #[serde(other)]
+    Other,
 }
 
 impl Definition {}
