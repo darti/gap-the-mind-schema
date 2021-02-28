@@ -25,6 +25,7 @@ pub struct Class {
 impl Class {
     pub fn generate(&self) -> Struct {
         let mut s = Struct::new(&self.label.escape());
+        s.vis("pub");
 
         if let Some(c) = &self.comment {
             s.doc(&c.to_string());
