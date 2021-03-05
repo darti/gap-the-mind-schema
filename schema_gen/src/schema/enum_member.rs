@@ -1,4 +1,4 @@
-use crate::Text;
+use crate::elements::Text;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]

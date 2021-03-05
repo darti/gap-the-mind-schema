@@ -1,7 +1,9 @@
+use crate::definition::Definition;
+use crate::elements::{Cardinality, Reference};
 use crate::return_types::actual_type;
 use crate::schema::class::Class;
 use crate::schema::property::Property;
-use crate::{Cardinality, Definition, Reference, Schema};
+use crate::Schema;
 use codegen::{Scope, Struct};
 use std::cell::RefCell;
 use std::collections::HashMap;

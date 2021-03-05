@@ -1,4 +1,4 @@
-use crate::{Cardinality, Reference, Text};
+use crate::elements::{Cardinality, Reference, Text};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
