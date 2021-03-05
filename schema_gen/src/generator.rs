@@ -28,7 +28,7 @@ impl<'a> Generator<'a> {
         self.structs.borrow_mut().insert(c.id.clone(), c.generate());
     }
 
-    fn gen_field(&self, p: &Property) {
+    fn gen_field(&self, _p: &Property) {
         /*let mut field = codegen::Field::new(&def.fn_name(), self.return_type(&def.range));
         field.doc(vec![&def.doc()]);
 

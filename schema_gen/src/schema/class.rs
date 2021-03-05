@@ -34,3 +34,30 @@ impl Class {
         s
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::class::Class;
+
+    #[test]
+    fn class_deserialize() {
+        let doc = r###"
+            {
+              "@id": "schema:Muscle",
+              "@type": "rdfs:Class",
+              "rdfs:comment": "A muscle is an anatomical structure consisting of a contractile form of tissue that animals use to effect movement.",
+              "rdfs:label": "Muscle",
+              "rdfs:subClassOf": {
+                "@id": "schema:AnatomicalStructure"
+              },
+              "schema:isPartOf": {
+                "@id": "https://health-lifesci.schema.org"
+              }
+            }
+        "###;
+
+        let obj: Class = serde_json::from_str(&doc).unwrap();
+
+        assert_eq!(obj.id, "schema:Muscle");
+    }
+}

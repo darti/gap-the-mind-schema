@@ -3,15 +3,15 @@ use std::fmt;
 use std::fmt::Formatter;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use url::Url;
 
+use crate::enum_member::EnumMember;
 use class::Class;
 use property::Property;
 
 pub mod class;
 pub mod r#enum;
-mod enum_member;
+pub mod enum_member;
 pub mod property;
 
 const DIGITS: [&str; 10] = [
@@ -70,14 +70,11 @@ pub struct Reference {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "@type")]
+#[serde(untagged)]
 pub enum Definition {
-    #[serde(rename = "rdf:Property")]
     Property(Property),
-    #[serde(rename = "rdfs:Class")]
     Class(Class),
-
-    #[serde(other)]
+    EnumMember(EnumMember),
     Other,
 }
 
