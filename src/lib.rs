@@ -1,2 +1,2 @@
 #![allow(clippy::all)]
-include!(concat!(env!("OUT_DIR"), "/mod"));
+include!(concat!(env!("OUT_DIR"), "/mod.rs"));
