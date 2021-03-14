@@ -1,16 +1,15 @@
-use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
-use serde::Deserializer;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
-use std::marker::PhantomData;
 use url::Url;
 
 const DIGITS: [&str; 10] = [
     "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
 ];
+
+const DATA_TYPE: &str = "schema:Datatype";
 
 #[derive(Deserialize, Debug)]
 pub struct Schema {
@@ -55,7 +54,14 @@ pub struct Definition {
     pub extra: HashMap<String, Value>,
 }
 
-impl Definition {}
+impl Definition {
+    pub fn is_primitive_type(&self) -> bool {
+        let types = &self.ty;
+        let mut types = types.into_iter();
+
+        types.any(|e| e == DATA_TYPE)
+    }
+}
 
 pub type RefList = Option<OneOrMany<Reference>>;
 
@@ -70,6 +76,20 @@ pub struct Reference {
 pub enum OneOrMany<T> {
     One(T),
     Many(Vec<T>),
+}
+
+impl<'a, T> IntoIterator for &'a OneOrMany<T> {
+    type Item = <std::slice::Iter<'a, T> as Iterator>::Item;
+    type IntoIter = std::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let items = match self {
+            OneOrMany::One(e) => std::slice::from_ref(e),
+            OneOrMany::Many(v) => v,
+        };
+
+        items.into_iter()
+    }
 }
 
 #[derive(Deserialize, Debug)]

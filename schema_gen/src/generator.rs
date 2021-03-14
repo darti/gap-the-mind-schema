@@ -62,7 +62,11 @@ impl<'a> Generator<'a> {
     }
 
     pub fn generate(&mut self) {
-        for d in &self.schema.graph {}
+        for d in &self.schema.graph {
+            if d.is_primitive_type() {
+                println!("{:?}", d.id);
+            }
+        }
 
         let mut scope = self.scope.borrow_mut();
     }
