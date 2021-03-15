@@ -1,3 +1,4 @@
+use crate::utils::escape;
 use crate::{Definition, Schema};
 use codegen::Scope;
 use std::cell::RefCell;
@@ -65,6 +66,10 @@ impl<'a> Generator<'a> {
         for d in &self.schema.graph {
             if d.is_primitive_type() {
                 println!("{:?}", d.id);
+            } else if d.is_struct_or_enum() {
+                self.scope
+                    .borrow_mut()
+                    .new_struct(escape(d.id.as_str()).as_str());
             }
         }
 
