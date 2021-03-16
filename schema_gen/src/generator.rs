@@ -1,7 +1,7 @@
 use crate::utils::escape;
 use crate::{Definition, Schema};
 use codegen::Scope;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -9,7 +9,20 @@ use std::rc::Rc;
 
 struct Entity {
     name: String,
+    comment: String,
     is_enum: bool,
+    members: Rc<RefCell<Vec<String>>>,
+}
+
+impl Entity {
+    fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            comment: String::default(),
+            is_enum: false,
+            members: Rc::new(RefCell::new((Vec::new()))),
+        }
+    }
 }
 
 pub struct Generator<'a> {
@@ -25,6 +38,16 @@ impl<'a> Generator<'a> {
             scope: Rc::new(RefCell::new(Scope::new())),
             structs: Rc::new(RefCell::new(HashMap::default())),
         }
+    }
+
+    fn get_struct(&self, name: &str) -> RefMut<Entity> {
+        if !self.structs.borrow().contains_key(name) {
+            self.structs
+                .borrow_mut()
+                .insert(name.to_string(), Entity::new(name));
+        }
+
+        RefMut::map(self.structs.borrow_mut(), |s| s.get_mut(name).unwrap())
     }
 
     fn gen_struct(&mut self, c: &Definition) {
@@ -67,13 +90,31 @@ impl<'a> Generator<'a> {
             if d.is_primitive_type() {
                 println!("{:?}", d.id);
             } else if d.is_struct_or_enum() {
-                self.scope
-                    .borrow_mut()
-                    .new_struct(escape(d.id.as_str()).as_str());
+                let name = escape(d.label.to_string().as_str());
+                let mut e = self.get_struct(&name);
+
+                if let Some(c) = &d.comment {
+                    e.comment.push_str(c.to_string().as_str())
+                }
+            } else if d.is_property() {
+            } else if d.is_enum_member() {
+                let parent = d.ty.into_iter().next().unwrap();
+                let parent = escape(parent);
+                let mut e = self.get_struct(&parent);
+
+                e.is_enum = true;
             }
         }
 
         let mut scope = self.scope.borrow_mut();
+
+        for (n, e) in self.structs.borrow().iter() {
+            if e.is_enum {
+                scope.new_enum(&n);
+            } else {
+                scope.new_struct(&n);
+            }
+        }
     }
 }
 

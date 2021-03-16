@@ -7,6 +7,7 @@ use url::Url;
 
 const DATA_TYPE: &str = "schema:Datatype";
 const CLASS_TYPE: &str = "rdfs:Class";
+const PROPERTY_TYPE: &str = "rdf:Property";
 
 #[derive(Deserialize, Debug)]
 pub struct Schema {
@@ -59,6 +60,13 @@ impl Definition {
         types.any(|e| e == DATA_TYPE)
     }
 
+    pub fn is_property(&self) -> bool {
+        let types = &self.ty;
+        let mut types = types.into_iter();
+
+        types.any(|e| e == PROPERTY_TYPE)
+    }
+
     pub fn is_struct_or_enum(&self) -> bool {
         let mut c = false;
         for t in (&self.ty).into_iter() {
@@ -70,6 +78,16 @@ impl Definition {
         }
 
         c
+    }
+
+    pub fn is_enum_member(&self) -> bool {
+        for t in (&self.ty).into_iter() {
+            if t == DATA_TYPE || t == CLASS_TYPE || t == PROPERTY_TYPE {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
