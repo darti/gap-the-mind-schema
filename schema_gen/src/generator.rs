@@ -1,7 +1,7 @@
 use crate::utils::escape;
-use crate::{Definition, Schema};
+use crate::{DefType, Definition, Schema};
 use codegen::Scope;
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -25,31 +25,9 @@ impl Entity {
     }
 }
 
-pub struct Generator<'a> {
-    schema: &'a Schema,
-    structs: Rc<RefCell<HashMap<String, Entity>>>,
-    scope: Rc<RefCell<Scope>>,
-}
+pub struct Generator {}
 
-impl<'a> Generator<'a> {
-    pub fn new(schema: &'a Schema) -> Self {
-        Generator {
-            schema,
-            scope: Rc::new(RefCell::new(Scope::new())),
-            structs: Rc::new(RefCell::new(HashMap::default())),
-        }
-    }
-
-    fn get_struct(&self, name: &str) -> RefMut<Entity> {
-        if !self.structs.borrow().contains_key(name) {
-            self.structs
-                .borrow_mut()
-                .insert(name.to_string(), Entity::new(name));
-        }
-
-        RefMut::map(self.structs.borrow_mut(), |s| s.get_mut(name).unwrap())
-    }
-
+impl Generator {
     fn gen_struct(&mut self, c: &Definition) {
         //self.structs.borrow_mut().insert(c.id.clone(), c.generate());
     }
@@ -84,42 +62,45 @@ impl<'a> Generator<'a> {
 
         "()".to_string()
     }
+}
 
-    pub fn generate(&mut self) {
-        for d in &self.schema.graph {
-            if d.is_primitive_type() {
-                println!("{:?}", d.id);
-            } else if d.is_struct_or_enum() {
+pub fn generate(schema: &Schema) -> String {
+    let mut scope = Scope::new();
+    let mut structs: HashMap<String, Entity> = HashMap::default();
+
+    for df in schema.graph.iter().map(|d| DefType::from(d)) {
+        match df {
+            DefType::Primitive(d) => {}
+            DefType::Property(d) => {}
+            DefType::StructEnum(d) => {
                 let name = escape(d.label.to_string().as_str());
-                let mut e = self.get_struct(&name);
+                let mut e = structs
+                    .entry(name.clone())
+                    .or_insert_with(|| Entity::new(&name));
 
                 if let Some(c) = &d.comment {
                     e.comment.push_str(c.to_string().as_str())
                 }
-            } else if d.is_property() {
-            } else if d.is_enum_member() {
+            }
+            DefType::EnumMember(d) => {
                 let parent = d.ty.into_iter().next().unwrap();
                 let parent = escape(parent);
-                let mut e = self.get_struct(&parent);
+                let mut e = structs
+                    .entry(parent.clone())
+                    .or_insert_with(|| Entity::new(&parent));
 
                 e.is_enum = true;
             }
         }
+    }
 
-        let mut scope = self.scope.borrow_mut();
-
-        for (n, e) in self.structs.borrow().iter() {
-            if e.is_enum {
-                scope.new_enum(&n);
-            } else {
-                scope.new_struct(&n);
-            }
+    for (n, e) in structs {
+        if e.is_enum {
+            scope.new_enum(&n);
+        } else {
+            scope.new_struct(&n);
         }
     }
-}
 
-impl<'a> Display for Generator<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.scope.borrow_mut().to_string())
-    }
+    scope.to_string()
 }

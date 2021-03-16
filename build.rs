@@ -1,4 +1,4 @@
-use schema_gen::{Generator, Schema};
+use schema_gen::{generate, Generator, Schema};
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
@@ -10,13 +10,12 @@ fn main() {
 
     let s = Schema::from_reader(reader).unwrap();
 
-    let mut g = Generator::new(&s);
-    g.generate();
+    let gen = generate(&s);
 
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     let out = out.join("mod").with_extension("rs");
     let out = File::create(out).unwrap();
 
     let mut writer = BufWriter::new(out);
-    writer.write_all(g.to_string().as_bytes()).unwrap();
+    writer.write_all(gen.as_bytes()).unwrap();
 }

@@ -25,6 +25,7 @@ impl Schema {
         serde_json::from_reader(rdr)
     }
 }
+
 #[derive(Deserialize, Debug)]
 pub struct Definition {
     #[serde(rename = "@id")]
@@ -52,42 +53,32 @@ pub struct Definition {
     pub extra: HashMap<String, Value>,
 }
 
-impl Definition {
-    pub fn is_primitive_type(&self) -> bool {
-        let types = &self.ty;
-        let mut types = types.into_iter();
+pub enum DefType<'a> {
+    Primitive(&'a Definition),
+    Property(&'a Definition),
+    EnumMember(&'a Definition),
+    StructEnum(&'a Definition),
+}
 
-        types.any(|e| e == DATA_TYPE)
-    }
+impl<'a> From<&'a Definition> for DefType<'a> {
+    fn from(d: &'a Definition) -> Self {
+        let mut class_type = false;
 
-    pub fn is_property(&self) -> bool {
-        let types = &self.ty;
-        let mut types = types.into_iter();
-
-        types.any(|e| e == PROPERTY_TYPE)
-    }
-
-    pub fn is_struct_or_enum(&self) -> bool {
-        let mut c = false;
-        for t in (&self.ty).into_iter() {
-            if t == DATA_TYPE {
-                return false;
+        for t in d.ty.into_iter() {
+            if t == PROPERTY_TYPE {
+                return DefType::Property(d);
+            } else if t == DATA_TYPE {
+                return DefType::Primitive(d);
             } else if t == CLASS_TYPE {
-                c = true;
+                class_type = true;
             }
         }
 
-        c
-    }
-
-    pub fn is_enum_member(&self) -> bool {
-        for t in (&self.ty).into_iter() {
-            if t == DATA_TYPE || t == CLASS_TYPE || t == PROPERTY_TYPE {
-                return false;
-            }
-        }
-
-        true
+        return if class_type {
+            DefType::StructEnum(d)
+        } else {
+            DefType::EnumMember(d)
+        };
     }
 }
 
