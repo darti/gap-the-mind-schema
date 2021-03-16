@@ -28,10 +28,6 @@ impl Entity {
 pub struct Generator {}
 
 impl Generator {
-    fn gen_struct(&mut self, c: &Definition) {
-        //self.structs.borrow_mut().insert(c.id.clone(), c.generate());
-    }
-
     fn gen_field(&self, _p: &Definition) {
         /*let mut field = codegen::Field::new(&def.fn_name(), self.return_type(&def.range));
         field.doc(vec![&def.doc()]);
@@ -68,10 +64,19 @@ pub fn generate(schema: &Schema) -> String {
     let mut scope = Scope::new();
     let mut structs: HashMap<String, Entity> = HashMap::default();
 
+    let get_parent_struct = |d: &Definition| {};
+
     for df in schema.graph.iter().map(|d| DefType::from(d)) {
         match df {
             DefType::Primitive(d) => {}
-            DefType::Property(d) => {}
+            DefType::Property(d) => {
+                let parent = escape(d.ty.into_iter().next().unwrap());
+                let mut e = structs
+                    .entry(parent.clone())
+                    .or_insert_with(|| Entity::new(&parent));
+
+                e.members.borrow_mut().push(d.label.to_string());
+            }
             DefType::StructEnum(d) => {
                 let name = escape(d.label.to_string().as_str());
                 let mut e = structs
@@ -83,20 +88,24 @@ pub fn generate(schema: &Schema) -> String {
                 }
             }
             DefType::EnumMember(d) => {
-                let parent = d.ty.into_iter().next().unwrap();
-                let parent = escape(parent);
+                let parent = escape(d.ty.into_iter().next().unwrap());
                 let mut e = structs
                     .entry(parent.clone())
                     .or_insert_with(|| Entity::new(&parent));
 
                 e.is_enum = true;
+                e.members.borrow_mut().push(d.label.to_string());
             }
         }
     }
 
     for (n, e) in structs {
         if e.is_enum {
-            scope.new_enum(&n);
+            let en = scope.new_enum(&n);
+
+            for m in e.members.borrow().iter() {
+                en.new_variant(m);
+            }
         } else {
             scope.new_struct(&n);
         }
