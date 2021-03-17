@@ -1,4 +1,4 @@
-use schema_gen::{generate, Generator, Schema};
+use schema_gen::{generate, Schema};
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};

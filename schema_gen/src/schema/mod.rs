@@ -53,6 +53,15 @@ pub struct Definition {
     pub extra: HashMap<String, Value>,
 }
 
+impl Definition {
+    pub fn parent_types(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        match &self.parents {
+            Some(tys) => Box::new(tys.into_iter().map(|t| t.id.as_ref())),
+            None => Box::new(std::iter::empty()),
+        }
+    }
+}
+
 pub enum DefType<'a> {
     Primitive(&'a Definition),
     Property(&'a Definition),

@@ -6,5 +6,5 @@ fn main() {
     let file = File::open("../schemas/schemaorg-current-https.jsonld").unwrap();
     let reader = BufReader::new(file);
 
-    let s = Schema::from_reader(reader).unwrap();
+    let _s = Schema::from_reader(reader).unwrap();
 }
