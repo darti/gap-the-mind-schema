@@ -2,8 +2,12 @@ use crate::utils::escape;
 use crate::{DefType, Definition, Schema};
 use codegen::Scope;
 use convert_case::{Case, Casing};
-use std::collections::HashMap;
-use std::{cell::RefCell, rc::Weak};
+use itertools::{Either, Itertools};
+use std::{cell::RefCell, hash::Hasher, rc::Weak};
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::Hash,
+};
 
 use std::rc::Rc;
 
@@ -12,7 +16,7 @@ struct Entity {
     comment: String,
     is_enum: bool,
     children: Rc<RefCell<Vec<Weak<Entity>>>>,
-    members: Rc<RefCell<Vec<String>>>,
+    members: Rc<RefCell<Vec<(String, String)>>>,
 }
 
 impl Entity {
@@ -25,62 +29,93 @@ impl Entity {
             members: Rc::new(RefCell::new(Vec::new())),
         }
     }
+
+    fn new_enum(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            comment: String::default(),
+            is_enum: true,
+            children: Rc::new(RefCell::new(Vec::new())),
+            members: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
 }
 
-fn gen_field(_p: &Definition) {
-    /*let mut field = codegen::Field::new(&def.fn_name(), self.return_type(&def.range));
-    field.doc(vec![&def.doc()]);
+fn simple_type(s: &str) -> Option<String> {
+    if s == "schema:Text" {
+        Some("String".to_string())
+    } else if s == "schema:Integer" {
+        Some("i64".to_string())
+    } else if s == "schema:Float" {
+        Some("f64".to_string())
+    } else if s == "schema:URL" {
+        Some("Url".to_string())
+    } else if s == "schema:Boolean" {
+        Some("bool".to_string())
+    } else if s == "schema:Date" {
+        Some("Date".to_string())
+    } else if s == "schema:Time" {
+        Some("Time".to_string())
+    } else if s == "schema:DateTime" {
+        Some("DateTime".to_string())
+    } else {
+        None
+    }
+}
+fn generate_property(structs: &mut HashMap<String, Entity>, d: &Definition) {
+    let label = escape(d.label.to_string().as_ref());
 
-    let mut structs = self.structs.borrow_mut();
+    let (mut simple, mut complex): (Vec<_>, Vec<&str>) =
+        d.ranges().partition_map(|r: &str| match simple_type(r) {
+            Some(s) => Either::Left(s),
+            None => Either::Right(r),
+        });
 
-    let mut add_field = |r: &Reference| {
-        structs.get_mut(&r.id).map(|t| t.push_field(field.clone()));
+    simple.sort_unstable();
+
+    let mut hash = DefaultHasher::new();
+    simple.hash(&mut hash);
+    let hash = hash.finish().to_string();
+
+    let enum_name = if simple.len() == 1 {
+        simple.first().unwrap().to_string()
+    } else {
+        let n = simple.join("Or");
+
+        structs.entry(hash.clone()).or_insert_with(|| {
+            let e = Entity::new_enum(n.clone().as_ref());
+
+            for s in simple {
+                e.members.borrow_mut().push((s, "".to_string()));
+            }
+
+            e
+        });
+
+        n.to_string()
     };
 
-    match &def.domain {
-        Some(Cardinality::Single(r)) => add_field(r),
-        Some(Cardinality::Sequence(v)) => v.iter().for_each(add_field),
-        _ => (),
-    };*/
-}
+    for dom in d.domains() {
+        let parent = escape(dom);
+        let parent = structs
+            .entry(parent.clone())
+            .or_insert_with(|| Entity::new(&parent));
 
-pub fn return_type(ty: &Vec<String>) -> String {
-    /* match ty {
-        Some(Cardinality::Single(r)) => actual_type(&r.id),
-        Some(Cardinality::Sequence(v)) => {
-            let ss: Vec<String> = v.iter().map(|r| actual_type(&r.id)).collect();
-
-            ss.join(",")
-        }
-        None => "()".to_string(),
-    }*/
-
-    "()".to_string()
+        parent
+            .members
+            .borrow_mut()
+            .push((label.clone(), enum_name.to_string()));
+    }
 }
 
 pub fn generate(schema: &Schema) -> String {
     let mut scope = Scope::new();
     let mut structs: HashMap<String, Entity> = HashMap::default();
 
-    let get_parent_struct = |d: &Definition| {};
-
     for df in schema.graph.iter().map(|d| DefType::from(d)) {
         match df {
             DefType::Primitive(d) => {}
-            DefType::Property(d) => {
-                let parent = escape(d.ty.into_iter().next().unwrap());
-                let e = structs
-                    .entry(parent.clone())
-                    .or_insert_with(|| Entity::new(&parent));
-
-                e.members
-                    .borrow_mut()
-                    .push(escape(d.label.to_string().as_ref()));
-
-                for t in d.parent_types() {
-                    //e.parents.borrow_mut().push(t.to_string());
-                }
-            }
+            DefType::Property(d) => generate_property(&mut structs, d),
             DefType::StructEnum(d) => {
                 let name = escape(d.label.to_string().as_str());
                 let e = structs
@@ -98,26 +133,31 @@ pub fn generate(schema: &Schema) -> String {
                     .or_insert_with(|| Entity::new(&parent));
 
                 e.is_enum = true;
-                e.members.borrow_mut().push(d.label.to_string());
+                e.members
+                    .borrow_mut()
+                    .push((d.label.to_string(), "".to_string()));
             }
         }
     }
 
     for (n, e) in structs {
         if e.is_enum {
-            let en = scope.new_enum(&n);
+            let en = scope.new_enum(&e.name);
 
-            for m in e.members.borrow().iter() {
+            for (m, t) in e.members.borrow().iter() {
                 en.new_variant(m);
             }
         } else {
-            let st = scope.new_struct(&n);
+            let st = scope.new_struct(&e.name);
 
-            for m in e.members.borrow().iter() {
-                st.field(m.to_case(Case::Snake).as_str(), "()");
+            for (m, t) in e.members.borrow().iter() {
+                st.field(m.to_case(Case::Snake).as_str(), t);
             }
         }
     }
+
+    scope.import("url", "Url");
+    scope.import("chrono", "{Date, DateTime}");
 
     scope.to_string()
 }

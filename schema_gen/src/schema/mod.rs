@@ -60,6 +60,20 @@ impl Definition {
             None => Box::new(std::iter::empty()),
         }
     }
+
+    pub fn domains(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        match &self.domain {
+            Some(d) => Box::new(d.into_iter().map(|t| t.id.as_ref())),
+            None => Box::new(std::iter::empty()),
+        }
+    }
+
+    pub fn ranges(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        match &self.range {
+            Some(d) => Box::new(d.into_iter().map(|t| t.id.as_ref())),
+            None => Box::new(std::iter::empty()),
+        }
+    }
 }
 
 pub enum DefType<'a> {
