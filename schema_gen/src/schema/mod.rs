@@ -5,7 +5,7 @@ use std::fmt;
 use std::fmt::Formatter;
 use url::Url;
 
-const DATA_TYPE: &str = "schema:Datatype";
+const DATA_TYPE: &str = "schema:DataType";
 const CLASS_TYPE: &str = "rdfs:Class";
 const PROPERTY_TYPE: &str = "rdf:Property";
 

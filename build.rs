@@ -1,5 +1,6 @@
-use schema_gen::{generate, Schema};
+use schema_gen::{Generation, Schema};
 use std::env;
+use std::fs;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::PathBuf;
@@ -9,13 +10,19 @@ fn main() {
     let reader = BufReader::new(file);
 
     let s = Schema::from_reader(reader).unwrap();
-
-    let gen = generate(&s);
+    let gen = Generation::new(&s);
 
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let out = out.join("mod").with_extension("rs");
-    let out = File::create(out).unwrap();
 
-    let mut writer = BufWriter::new(out);
-    writer.write_all(gen.as_bytes()).unwrap();
+    fs::write(
+        out.join("structs").with_extension("rs"),
+        gen.generate_structs(),
+    );
+
+    fs::write(out.join("enums").with_extension("rs"), gen.generate_enums());
+
+    fs::write(
+        out.join("unions").with_extension("rs"),
+        gen.generate_unions(),
+    );
 }

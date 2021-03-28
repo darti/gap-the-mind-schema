@@ -1,2 +1,5 @@
-#![allow(clippy::all)]
-include!(concat!(env!("OUT_DIR"), "/mod.rs"));
+mod enums;
+mod structs;
+mod unions;
+
+pub use structs::*;
