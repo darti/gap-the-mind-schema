@@ -2,7 +2,7 @@ use schema_gen::{Generation, Schema};
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Write};
+use std::io::BufReader;
 use std::path::PathBuf;
 
 fn main() {
@@ -14,14 +14,14 @@ fn main() {
 
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-    fs::write(
+    let _s = fs::write(
         out.join("structs").with_extension("rs"),
         gen.generate_structs(),
     );
 
-    fs::write(out.join("enums").with_extension("rs"), gen.generate_enums());
+    let _e = fs::write(out.join("enums").with_extension("rs"), gen.generate_enums());
 
-    fs::write(
+    let _u = fs::write(
         out.join("unions").with_extension("rs"),
         gen.generate_unions(),
     );

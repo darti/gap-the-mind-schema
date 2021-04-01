@@ -9,6 +9,16 @@ const DATA_TYPE: &str = "schema:DataType";
 const CLASS_TYPE: &str = "rdfs:Class";
 const PROPERTY_TYPE: &str = "rdf:Property";
 
+const DATA_TYPES: [&str; 7] = [
+    "schema:Float",
+    "schema:DateTime",
+    "schema:Date",
+    "schema:Time",
+    "schema:Text",
+    "schema:Number",
+    "schema:Boolean",
+];
+
 #[derive(Deserialize, Debug)]
 pub struct Schema {
     #[serde(rename = "@context")]
@@ -86,6 +96,10 @@ pub enum DefType<'a> {
 impl<'a> From<&'a Definition> for DefType<'a> {
     fn from(d: &'a Definition) -> Self {
         let mut class_type = false;
+
+        if DATA_TYPES.contains(&&d.id.as_ref()) {
+            return DefType::Primitive(d);
+        }
 
         for t in d.ty.into_iter() {
             if t == PROPERTY_TYPE {

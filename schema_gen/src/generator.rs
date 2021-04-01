@@ -3,7 +3,7 @@ use crate::{DefType, Definition, Schema};
 use codegen::Scope;
 use convert_case::{Case, Casing};
 use itertools::{Either, Itertools};
-use std::{cell::RefCell, hash::Hasher, rc::Weak};
+use std::{cell::RefCell, hash::Hasher};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hash,
@@ -15,7 +15,7 @@ struct Entity {
     name: String,
     comment: String,
     is_enum: bool,
-    children: Rc<RefCell<Vec<Weak<Entity>>>>,
+    // children: Rc<RefCell<Vec<Weak<Entity>>>>,
     members: Rc<RefCell<Vec<(String, String)>>>,
 }
 
@@ -25,7 +25,7 @@ impl Entity {
             name: name.to_string(),
             comment: String::default(),
             is_enum: false,
-            children: Rc::new(RefCell::new(Vec::new())),
+            // children: Rc::new(RefCell::new(Vec::new())),
             members: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -35,7 +35,7 @@ impl Entity {
             name: name.to_string(),
             comment: String::default(),
             is_enum: true,
-            children: Rc::new(RefCell::new(Vec::new())),
+            // children: Rc::new(RefCell::new(Vec::new())),
             members: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -103,7 +103,7 @@ impl Generation {
         let has_simple = !simple.is_empty();
 
         let enum_name = if simple.len() == 1 {
-            simple.first().unwrap().to_string()
+            simple.first().unwrap().1.to_string()
         } else if simple.is_empty() {
             "???".to_string()
         } else {
@@ -111,19 +111,19 @@ impl Generation {
             simple.hash(&mut hash);
             let hash = hash.finish().to_string();
 
-            let n = simple.join("Or");
+            let n = simple.iter().map(|e| e.0).join("Or");
 
             self.unions.entry(hash.clone()).or_insert_with(|| {
                 let e = Entity::new_enum(n.clone().as_ref());
 
-                for s in simple {
-                    e.members.borrow_mut().push((s, "".to_string()));
+                for (s, t) in simple {
+                    e.members.borrow_mut().push((s.to_string(), t.to_string()));
                 }
 
                 e
             });
 
-            n.to_string()
+            n
         };
 
         for dom in d.domains() {
@@ -146,7 +146,7 @@ impl Generation {
         let mut scope = Scope::new();
 
         scope.import("url", "Url");
-        scope.import("chrono", "{Date, DateTime}");
+        scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
         scope.import("crate::enums", "*");
         scope.import("crate::unions", "*");
 
@@ -166,9 +166,6 @@ impl Generation {
     pub fn generate_enums(&self) -> String {
         let mut scope = Scope::new();
 
-        scope.import("url", "Url");
-        scope.import("chrono", "{Date, DateTime}");
-
         for (_n, e) in &self.structs {
             if e.is_enum {
                 let en = scope.new_enum(&e.name).vis("pub");
@@ -186,7 +183,7 @@ impl Generation {
         let mut scope = Scope::new();
 
         scope.import("url", "Url");
-        scope.import("chrono", "{Date, DateTime}");
+        scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
 
         for (_n, e) in &self.unions {
             let en = scope.new_enum(&e.name).vis("pub");
@@ -194,7 +191,7 @@ impl Generation {
             for (m, t) in e.members.borrow().iter() {
                 let name = m.to_case(Case::UpperCamel);
                 let v = en.new_variant(&name);
-                v.tuple(m);
+                v.tuple(t);
             }
         }
 
@@ -202,23 +199,23 @@ impl Generation {
     }
 }
 
-fn simple_type(s: &str) -> Option<String> {
+fn simple_type(s: &str) -> Option<(&str, &str)> {
     if s == "schema:Text" {
-        Some("String".to_string())
+        Some(("String", "String"))
     } else if s == "schema:Integer" {
-        Some("i64".to_string())
+        Some(("i64", "i64"))
     } else if s == "schema:Float" {
-        Some("f64".to_string())
+        Some(("f64", "f64"))
     } else if s == "schema:URL" {
-        Some("Url".to_string())
+        Some(("Url", "Url"))
     } else if s == "schema:Boolean" {
-        Some("bool".to_string())
+        Some(("Bool", "bool"))
     } else if s == "schema:Date" {
-        Some("Date".to_string())
+        Some(("Date", "Date<Utc>"))
     } else if s == "schema:Time" {
-        Some("Time".to_string())
+        Some(("Time", "NaiveTime"))
     } else if s == "schema:DateTime" {
-        Some("DateTime".to_string())
+        Some(("DateTime", "DateTime<Utc>"))
     } else {
         None
     }
