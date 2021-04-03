@@ -90,33 +90,29 @@ impl Generation {
         }
     }
 
-    fn create_property(&mut self, d: &Definition) {
-        let label = escape(d.label.to_string().as_ref());
+    fn create_simple_property(
+        &mut self,
+        domains: Box<dyn Iterator<Item = &str> + '_>,
+        label: String,
+        types: &Vec<(&str, &str)>,
+    ) {
+        if types.is_empty() {
+            return;
+        }
 
-        let (mut simple, mut complex): (Vec<_>, Vec<&str>) =
-            d.ranges().partition_map(|r: &str| match simple_type(r) {
-                Some(s) => Either::Left(s),
-                None => Either::Right(r),
-            });
-
-        simple.sort_unstable();
-        let has_simple = !simple.is_empty();
-
-        let enum_name = if simple.len() == 1 {
-            simple.first().unwrap().1.to_string()
-        } else if simple.is_empty() {
-            "???".to_string()
+        let enum_name = if types.len() == 1 {
+            types.first().unwrap().1.to_string()
         } else {
             let mut hash = DefaultHasher::new();
-            simple.hash(&mut hash);
+            types.hash(&mut hash);
             let hash = hash.finish().to_string();
 
-            let n = simple.iter().map(|e| e.0).join("Or");
+            let n = types.iter().map(|e| e.0).join("Or");
 
             self.unions.entry(hash.clone()).or_insert_with(|| {
                 let e = Entity::new_enum(n.clone().as_ref());
 
-                for (s, t) in simple {
+                for (s, t) in types {
                     e.members.borrow_mut().push((s.to_string(), t.to_string()));
                 }
 
@@ -126,20 +122,67 @@ impl Generation {
             n
         };
 
-        for dom in d.domains() {
+        for dom in domains {
             let parent = escape(dom);
             let parent = self
                 .structs
                 .entry(parent.clone())
                 .or_insert_with(|| Entity::new(&parent));
 
-            if has_simple {
-                parent
-                    .members
-                    .borrow_mut()
-                    .push((label.clone(), enum_name.to_string()));
-            };
+            parent
+                .members
+                .borrow_mut()
+                .push((label.clone(), enum_name.to_string()));
         }
+    }
+
+    fn create_complex_property(
+        &mut self,
+        domains: Box<dyn Iterator<Item = &str> + '_>,
+        label: String,
+        types: &Vec<String>,
+    ) {
+        if types.is_empty() {
+            return;
+        }
+
+        let enum_name = if types.len() == 1 {
+            types.first().unwrap().to_string()
+        } else {
+            let mut hash = DefaultHasher::new();
+            types.hash(&mut hash);
+            let hash = hash.finish().to_string();
+
+            let n = types.iter().map(|e| e).join("Or");
+
+            self.unions.entry(hash.clone()).or_insert_with(|| {
+                let e = Entity::new_enum(n.clone().as_ref());
+
+                for t in types {
+                    e.members.borrow_mut().push((t.to_string(), t.to_string()));
+                }
+
+                e
+            });
+
+            n
+        };
+    }
+
+    fn create_property(&mut self, d: &Definition) {
+        let label = escape(d.label.to_string().as_ref());
+
+        let (mut simple, mut complex): (Vec<_>, Vec<String>) =
+            d.ranges().partition_map(|r: &str| match simple_type(r) {
+                Some(s) => Either::Left(s),
+                None => Either::Right(escape(r)),
+            });
+
+        simple.sort_unstable();
+        complex.sort_unstable();
+
+        self.create_simple_property(d.domains(), label.clone(), &simple);
+        self.create_complex_property(d.domains(), label, &complex);
     }
 
     pub fn generate_structs(&self) -> String {
@@ -184,6 +227,7 @@ impl Generation {
 
         scope.import("url", "Url");
         scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
+        scope.import("crate::structs", "*");
 
         for (_n, e) in &self.unions {
             let en = scope.new_enum(&e.name).vis("pub");
@@ -203,9 +247,11 @@ fn simple_type(s: &str) -> Option<(&str, &str)> {
     if s == "schema:Text" {
         Some(("String", "String"))
     } else if s == "schema:Integer" {
-        Some(("i64", "i64"))
+        Some(("Integer", "i64"))
     } else if s == "schema:Float" {
-        Some(("f64", "f64"))
+        Some(("Float", "f64"))
+    } else if s == "schema:Number" {
+        Some(("Number", "f64"))
     } else if s == "schema:URL" {
         Some(("Url", "Url"))
     } else if s == "schema:Boolean" {
