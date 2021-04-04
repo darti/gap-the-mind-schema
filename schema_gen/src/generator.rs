@@ -3,53 +3,23 @@ use crate::{DefType, Definition, Schema};
 use codegen::Scope;
 use convert_case::{Case, Casing};
 use itertools::{Either, Itertools};
-use std::{cell::RefCell, hash::Hasher};
+use std::hash::Hasher;
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hash,
 };
 
-use std::rc::Rc;
-
-struct Entity {
-    name: String,
-    comment: String,
-    is_enum: bool,
-    // children: Rc<RefCell<Vec<Weak<Entity>>>>,
-    members: Rc<RefCell<Vec<(String, String)>>>,
-}
-
-impl Entity {
-    fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            comment: String::default(),
-            is_enum: false,
-            // children: Rc::new(RefCell::new(Vec::new())),
-            members: Rc::new(RefCell::new(Vec::new())),
-        }
-    }
-
-    fn new_enum(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            comment: String::default(),
-            is_enum: true,
-            // children: Rc::new(RefCell::new(Vec::new())),
-            members: Rc::new(RefCell::new(Vec::new())),
-        }
-    }
-}
-
 pub struct Generation {
-    structs: HashMap<String, Entity>,
-    unions: HashMap<String, Entity>,
+    structs: HashMap<String, codegen::Struct>,
+    enums: HashMap<String, codegen::Enum>,
+    unions: HashMap<String, codegen::Enum>,
 }
 
 impl Generation {
     pub fn new(schema: &Schema) -> Self {
         let mut gen = Generation {
             structs: HashMap::default(),
+            enums: HashMap::default(),
             unions: HashMap::default(),
         };
 
@@ -58,33 +28,69 @@ impl Generation {
         gen
     }
 
+    fn get_enum(&mut self, name: String) -> &mut codegen::Enum {
+        self.enums
+            .entry(name.clone())
+            .or_insert_with(|| codegen::Enum::new(&name))
+    }
+
+    fn get_union(&mut self, types: &Vec<(&str, &str)>) -> String {
+        if types.len() == 1 {
+            types.first().unwrap().1.to_string()
+        } else {
+            let mut hash = DefaultHasher::new();
+            types.hash(&mut hash);
+            let hash = hash.finish().to_string();
+
+            let name = types.iter().map(|e| e.0).join("Or");
+            self.unions.entry(name.clone()).or_insert_with(|| {
+                let mut e = codegen::Enum::new(&name);
+
+                for (s, t) in types {
+                    let name = s.to_case(Case::UpperCamel);
+                    let v = e.new_variant(&name);
+                    v.tuple(t);
+                }
+
+                e
+            });
+
+            name
+        }
+    }
+
+    fn get_struct(&mut self, name: String) -> &mut codegen::Struct {
+        self.structs
+            .entry(name.clone())
+            .or_insert_with(|| codegen::Struct::new(&name))
+    }
+
     pub fn generate(&mut self, schema: &Schema) {
         for df in schema.graph.iter().map(|d| DefType::from(d)) {
             match df {
                 DefType::Primitive(d) => {}
                 DefType::Property(d) => self.create_property(d),
-                DefType::StructEnum(d) => {
+                DefType::Struct(d) => {
                     let name = escape(d.label.to_string().as_str());
-                    let e = self
-                        .structs
-                        .entry(name.clone())
-                        .or_insert_with(|| Entity::new(&name));
+                    let e = self.get_struct(name);
 
-                    if let Some(c) = &d.comment {
-                        e.comment.push_str(c.to_string().as_str())
+                    if let Some(c) = d.doc() {
+                        e.doc(&c);
+                    }
+                }
+                DefType::Enum(d) => {
+                    let name = escape(d.label.to_string().as_str());
+                    let e = self.get_enum(name);
+
+                    if let Some(c) = d.doc() {
+                        e.doc(&c);
                     }
                 }
                 DefType::EnumMember(d) => {
                     let parent = escape(d.ty.into_iter().next().unwrap());
-                    let mut e = self
-                        .structs
-                        .entry(parent.clone())
-                        .or_insert_with(|| Entity::new(&parent));
 
-                    e.is_enum = true;
-                    e.members
-                        .borrow_mut()
-                        .push((d.label.to_string(), "".to_string()));
+                    self.get_enum(parent)
+                        .new_variant(d.label.to_string().as_ref());
                 }
             }
         }
@@ -95,44 +101,20 @@ impl Generation {
         domains: Box<dyn Iterator<Item = &str> + '_>,
         label: String,
         types: &Vec<(&str, &str)>,
+        doc: &Option<String>,
     ) {
-        if types.is_empty() {
-            return;
-        }
-
-        let enum_name = if types.len() == 1 {
-            types.first().unwrap().1.to_string()
-        } else {
-            let mut hash = DefaultHasher::new();
-            types.hash(&mut hash);
-            let hash = hash.finish().to_string();
-
-            let n = types.iter().map(|e| e.0).join("Or");
-
-            self.unions.entry(hash.clone()).or_insert_with(|| {
-                let e = Entity::new_enum(n.clone().as_ref());
-
-                for (s, t) in types {
-                    e.members.borrow_mut().push((s.to_string(), t.to_string()));
-                }
-
-                e
-            });
-
-            n
-        };
+        let field_type = self.get_union(types);
 
         for dom in domains {
             let parent = escape(dom);
-            let parent = self
-                .structs
-                .entry(parent.clone())
-                .or_insert_with(|| Entity::new(&parent));
+            let parent = self.get_struct(parent);
+            let mut f = codegen::Field::new(&label, field_type.clone());
 
-            parent
-                .members
-                .borrow_mut()
-                .push((label.clone(), enum_name.to_string()));
+            if let Some(d) = doc {
+                f.doc(vec![d]);
+            }
+
+            parent.push_field(f);
         }
     }
 
@@ -140,49 +122,32 @@ impl Generation {
         &mut self,
         domains: Box<dyn Iterator<Item = &str> + '_>,
         label: String,
-        types: &Vec<String>,
+        types: &Vec<(&str, &str)>,
     ) {
-        if types.is_empty() {
-            return;
-        }
-
-        let enum_name = if types.len() == 1 {
-            types.first().unwrap().to_string()
-        } else {
-            let mut hash = DefaultHasher::new();
-            types.hash(&mut hash);
-            let hash = hash.finish().to_string();
-
-            let n = types.iter().map(|e| e).join("Or");
-
-            self.unions.entry(hash.clone()).or_insert_with(|| {
-                let e = Entity::new_enum(n.clone().as_ref());
-
-                for t in types {
-                    e.members.borrow_mut().push((t.to_string(), t.to_string()));
-                }
-
-                e
-            });
-
-            n
-        };
+        let field_type = self.get_union(types);
     }
 
     fn create_property(&mut self, d: &Definition) {
         let label = escape(d.label.to_string().as_ref());
 
-        let (mut simple, mut complex): (Vec<_>, Vec<String>) =
+        let (mut simple, mut complex): (Vec<_>, Vec<_>) =
             d.ranges().partition_map(|r: &str| match simple_type(r) {
                 Some(s) => Either::Left(s),
-                None => Either::Right(escape(r)),
+                None => {
+                    let t = escape(r);
+                    Either::Right((t.as_ref(), t.as_ref()))
+                }
             });
 
-        simple.sort_unstable();
-        complex.sort_unstable();
+        if !simple.is_empty() {
+            simple.sort_unstable();
+            self.create_simple_property(d.domains(), label, &simple, &d.doc());
+        }
 
-        self.create_simple_property(d.domains(), label.clone(), &simple);
-        self.create_complex_property(d.domains(), label, &complex);
+        if complex.is_empty() {
+            complex.sort_unstable();
+            self.create_complex_property(d.domains(), label, &complex);
+        }
     }
 
     pub fn generate_structs(&self) -> String {
@@ -193,30 +158,8 @@ impl Generation {
         scope.import("crate::enums", "*");
         scope.import("crate::unions", "*");
 
-        for (_n, e) in &self.structs {
-            if !e.is_enum {
-                let st = scope.new_struct(&e.name).vis("pub");
-
-                for (m, t) in e.members.borrow().iter() {
-                    st.field(m.to_case(Case::Snake).as_str(), t);
-                }
-            }
-        }
-
-        scope.to_string()
-    }
-
-    pub fn generate_enums(&self) -> String {
-        let mut scope = Scope::new();
-
-        for (_n, e) in &self.structs {
-            if e.is_enum {
-                let en = scope.new_enum(&e.name).vis("pub");
-
-                for (m, _t) in e.members.borrow().iter() {
-                    en.new_variant(m);
-                }
-            }
+        for (n, s) in &self.structs {
+            scope.push_struct(*s.vis("pub"));
         }
 
         scope.to_string()
@@ -228,15 +171,25 @@ impl Generation {
         scope.import("url", "Url");
         scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
         scope.import("crate::structs", "*");
+        scope.import("crate::enums", "*");
 
         for (_n, e) in &self.unions {
-            let en = scope.new_enum(&e.name).vis("pub");
+            scope.push_enum(*e.vis("pub"));
+        }
 
-            for (m, t) in e.members.borrow().iter() {
-                let name = m.to_case(Case::UpperCamel);
-                let v = en.new_variant(&name);
-                v.tuple(t);
-            }
+        scope.to_string()
+    }
+
+    pub fn generate_enums(&mut self) -> String {
+        let mut scope = Scope::new();
+
+        scope.import("url", "Url");
+        scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
+
+        for (_n, e) in &mut self.enums {
+            e.vis("pub");
+
+            scope.push_enum(*e);
         }
 
         scope.to_string()
