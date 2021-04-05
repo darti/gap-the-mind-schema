@@ -145,34 +145,10 @@ impl Generation {
         }
     }
 
-    fn create_simple_property(
-        &mut self,
-        domains: Box<dyn Iterator<Item = &str> + '_>,
-        name: &str,
-        types: &Vec<(&str, &str)>,
-        doc: &Option<String>,
-    ) {
-        let field_type = self.get_union(types);
-
-        for dom in domains {
-            let parent = escape(dom);
-            self.get_struct(&parent).add_prop(name, doc, &field_type);
-        }
-    }
-
-    fn create_complex_property(
-        &mut self,
-        domains: Box<dyn Iterator<Item = &str> + '_>,
-        name: &str,
-        types: &Vec<(&str, &str)>,
-    ) {
-        let field_type = self.get_union(types);
-    }
-
     fn create_property(&mut self, d: &Definition) {
         let label = escape(d.label.to_string().as_ref());
 
-        let (mut simple, complex): (Vec<_>, Vec<_>) =
+        let (mut simple, mut complex): (Vec<_>, Vec<_>) =
             d.ranges().partition_map(|r: &str| match simple_type(r) {
                 Some(s) => Either::Left(s),
                 None => {
@@ -181,19 +157,31 @@ impl Generation {
                 }
             });
 
-        let mut complex: Vec<(&str, &str)> = complex
+        simple.sort_unstable();
+        complex.sort_unstable();
+
+        let complex: Vec<(&str, &str)> = complex
             .iter()
             .map(|(s, t)| (s.as_ref(), t.as_ref()))
             .collect();
 
-        if !simple.is_empty() {
-            simple.sort_unstable();
-            self.create_simple_property(d.domains(), &label, &simple, &d.doc());
-        }
+        let simple_ty = self.get_union(&simple);
+        let complex_ty = self.get_union(&complex);
 
-        if !complex.is_empty() {
-            complex.sort_unstable();
-            self.create_complex_property(d.domains(), &label, &complex);
+        let has_simple = !simple.is_empty();
+        let has_complex = !complex.is_empty();
+
+        for t in d.domains() {
+            let target = escape(t);
+            let target = self.get_struct(&target);
+
+            if has_simple {
+                target.add_prop(&label, &d.doc(), &simple_ty);
+            }
+
+            if has_complex {
+                target.add_prop(&label, &d.doc(), &complex_ty);
+            }
         }
     }
 
