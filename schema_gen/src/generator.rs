@@ -35,15 +35,34 @@ impl Entity {
     }
 
     fn to_struct<'a>(&self, scope: &'a mut Scope) -> &'a mut Struct {
-        let s = scope.new_struct(&self.name);
+        let s = scope.new_struct(&self.name).vis("pub");
         s.doc(&self.doc);
+
+        for p in &self.props {
+            s.field(&p.name, &p.ty).doc(&p.doc);
+        }
 
         s
     }
 
     fn to_enum<'a>(&self, scope: &'a mut Scope) -> &'a mut Enum {
-        let s = scope.new_enum(&self.name);
+        let s = scope.new_enum(&self.name).vis("pub");
         s.doc(&self.doc);
+
+        for p in &self.props {
+            s.new_variant(&p.name);
+        }
+
+        s
+    }
+
+    fn to_union<'a>(&self, scope: &'a mut Scope) -> &'a mut Enum {
+        let s = scope.new_enum(&self.name).vis("pub");
+        s.doc(&self.doc);
+
+        for p in &self.props {
+            s.new_variant(&p.name).tuple(&p.ty);
+        }
 
         s
     }
@@ -153,7 +172,7 @@ impl Generation {
     fn create_property(&mut self, d: &Definition) {
         let label = escape(d.label.to_string().as_ref());
 
-        let (mut simple, mut complex): (Vec<_>, Vec<_>) =
+        let (mut simple, complex): (Vec<_>, Vec<_>) =
             d.ranges().partition_map(|r: &str| match simple_type(r) {
                 Some(s) => Either::Left(s),
                 None => {
@@ -172,7 +191,7 @@ impl Generation {
             self.create_simple_property(d.domains(), &label, &simple, &d.doc());
         }
 
-        if complex.is_empty() {
+        if !complex.is_empty() {
             complex.sort_unstable();
             self.create_complex_property(d.domains(), &label, &complex);
         }
@@ -202,7 +221,7 @@ impl Generation {
         scope.import("crate::enums", "*");
 
         for (_n, e) in &self.unions {
-            e.to_enum(&mut scope);
+            e.to_union(&mut scope);
         }
 
         scope.to_string()
