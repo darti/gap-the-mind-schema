@@ -10,7 +10,8 @@ fn main() {
     let reader = BufReader::new(file);
 
     let s = Schema::from_reader(reader).unwrap();
-    let gen = Generation::new(&s);
+    let mut gen = Generation::new();
+    gen.generate(&s);
 
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
 

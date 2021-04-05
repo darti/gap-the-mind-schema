@@ -88,7 +88,7 @@ impl Definition {
     }
 
     pub fn doc(&self) -> Option<String> {
-        self.comment.map(|t| t.to_string())
+        self.comment.as_ref().map(|t| t.to_string())
     }
 }
 
@@ -120,7 +120,7 @@ impl<'a> From<&'a Definition> for DefType<'a> {
             }
         }
 
-        DefType::Enum(d)
+        DefType::Struct(d)
     }
 }
 

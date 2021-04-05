@@ -1,55 +1,91 @@
 use crate::utils::escape;
 use crate::{DefType, Definition, Schema};
-use codegen::Scope;
+use codegen::{Enum, Scope, Struct};
 use convert_case::{Case, Casing};
 use itertools::{Either, Itertools};
-use std::hash::Hasher;
-use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
-    hash::Hash,
-};
+use std::collections::HashMap;
+
+struct Prop {
+    name: String,
+    doc: String,
+    ty: String,
+}
+
+struct Entity {
+    name: String,
+    doc: String,
+    props: Vec<Prop>,
+}
+
+impl Entity {
+    fn new(name: &str) -> Self {
+        Entity {
+            name: name.to_string(),
+            doc: String::default(),
+            props: Vec::new(),
+        }
+    }
+
+    fn add_prop(&mut self, name: &str, doc: &Option<String>, ty: &str) {
+        self.props.push(Prop {
+            name: name.to_string(),
+            doc: doc.as_deref().unwrap_or("").to_string(),
+            ty: ty.to_string(),
+        })
+    }
+
+    fn to_struct<'a>(&self, scope: &'a mut Scope) -> &'a mut Struct {
+        let s = scope.new_struct(&self.name);
+        s.doc(&self.doc);
+
+        s
+    }
+
+    fn to_enum<'a>(&self, scope: &'a mut Scope) -> &'a mut Enum {
+        let s = scope.new_enum(&self.name);
+        s.doc(&self.doc);
+
+        s
+    }
+}
 
 pub struct Generation {
-    structs: HashMap<String, codegen::Struct>,
-    enums: HashMap<String, codegen::Enum>,
-    unions: HashMap<String, codegen::Enum>,
+    structs: HashMap<String, Entity>,
+    enums: HashMap<String, Entity>,
+    unions: HashMap<String, Entity>,
 }
 
 impl Generation {
-    pub fn new(schema: &Schema) -> Self {
-        let mut gen = Generation {
+    pub fn new() -> Self {
+        Generation {
             structs: HashMap::default(),
             enums: HashMap::default(),
             unions: HashMap::default(),
-        };
-
-        gen.generate(schema);
-
-        gen
+        }
     }
 
-    fn get_enum(&mut self, name: String) -> &mut codegen::Enum {
+    fn get_struct(&mut self, name: &str) -> &mut Entity {
+        self.structs
+            .entry(name.to_string())
+            .or_insert_with(|| Entity::new(name))
+    }
+
+    fn get_enum(&mut self, name: &str) -> &mut Entity {
         self.enums
-            .entry(name.clone())
-            .or_insert_with(|| codegen::Enum::new(&name))
+            .entry(name.to_string())
+            .or_insert_with(|| Entity::new(name))
     }
 
     fn get_union(&mut self, types: &Vec<(&str, &str)>) -> String {
         if types.len() == 1 {
             types.first().unwrap().1.to_string()
         } else {
-            let mut hash = DefaultHasher::new();
-            types.hash(&mut hash);
-            let hash = hash.finish().to_string();
-
             let name = types.iter().map(|e| e.0).join("Or");
             self.unions.entry(name.clone()).or_insert_with(|| {
-                let mut e = codegen::Enum::new(&name);
+                let mut e = Entity::new(&name);
 
                 for (s, t) in types {
-                    let name = s.to_case(Case::UpperCamel);
-                    let v = e.new_variant(&name);
-                    v.tuple(t);
+                    e.add_prop(&s.to_case(Case::UpperCamel), &Option::None, t);
                 }
 
                 e
@@ -59,38 +95,32 @@ impl Generation {
         }
     }
 
-    fn get_struct(&mut self, name: String) -> &mut codegen::Struct {
-        self.structs
-            .entry(name.clone())
-            .or_insert_with(|| codegen::Struct::new(&name))
-    }
-
     pub fn generate(&mut self, schema: &Schema) {
         for df in schema.graph.iter().map(|d| DefType::from(d)) {
             match df {
-                DefType::Primitive(d) => {}
+                DefType::Primitive(_d) => {}
                 DefType::Property(d) => self.create_property(d),
                 DefType::Struct(d) => {
                     let name = escape(d.label.to_string().as_str());
-                    let e = self.get_struct(name);
+                    let mut e = self.get_struct(&name);
 
                     if let Some(c) = d.doc() {
-                        e.doc(&c);
+                        e.doc = c;
                     }
                 }
                 DefType::Enum(d) => {
                     let name = escape(d.label.to_string().as_str());
-                    let e = self.get_enum(name);
+                    let e = self.get_enum(&name);
 
                     if let Some(c) = d.doc() {
-                        e.doc(&c);
+                        e.doc = c;
                     }
                 }
                 DefType::EnumMember(d) => {
                     let parent = escape(d.ty.into_iter().next().unwrap());
 
-                    self.get_enum(parent)
-                        .new_variant(d.label.to_string().as_ref());
+                    self.get_enum(&parent)
+                        .add_prop(&d.label.to_string(), &d.doc(), "");
                 }
             }
         }
@@ -99,7 +129,7 @@ impl Generation {
     fn create_simple_property(
         &mut self,
         domains: Box<dyn Iterator<Item = &str> + '_>,
-        label: String,
+        name: &str,
         types: &Vec<(&str, &str)>,
         doc: &Option<String>,
     ) {
@@ -107,21 +137,14 @@ impl Generation {
 
         for dom in domains {
             let parent = escape(dom);
-            let parent = self.get_struct(parent);
-            let mut f = codegen::Field::new(&label, field_type.clone());
-
-            if let Some(d) = doc {
-                f.doc(vec![d]);
-            }
-
-            parent.push_field(f);
+            self.get_struct(&parent).add_prop(name, doc, &field_type);
         }
     }
 
     fn create_complex_property(
         &mut self,
         domains: Box<dyn Iterator<Item = &str> + '_>,
-        label: String,
+        name: &str,
         types: &Vec<(&str, &str)>,
     ) {
         let field_type = self.get_union(types);
@@ -135,18 +158,23 @@ impl Generation {
                 Some(s) => Either::Left(s),
                 None => {
                     let t = escape(r);
-                    Either::Right((t.as_ref(), t.as_ref()))
+                    Either::Right((t.clone(), t))
                 }
             });
 
+        let mut complex: Vec<(&str, &str)> = complex
+            .iter()
+            .map(|(s, t)| (s.as_ref(), t.as_ref()))
+            .collect();
+
         if !simple.is_empty() {
             simple.sort_unstable();
-            self.create_simple_property(d.domains(), label, &simple, &d.doc());
+            self.create_simple_property(d.domains(), &label, &simple, &d.doc());
         }
 
         if complex.is_empty() {
             complex.sort_unstable();
-            self.create_complex_property(d.domains(), label, &complex);
+            self.create_complex_property(d.domains(), &label, &complex);
         }
     }
 
@@ -158,8 +186,8 @@ impl Generation {
         scope.import("crate::enums", "*");
         scope.import("crate::unions", "*");
 
-        for (n, s) in &self.structs {
-            scope.push_struct(*s.vis("pub"));
+        for (_n, e) in &self.structs {
+            e.to_struct(&mut scope);
         }
 
         scope.to_string()
@@ -174,22 +202,20 @@ impl Generation {
         scope.import("crate::enums", "*");
 
         for (_n, e) in &self.unions {
-            scope.push_enum(*e.vis("pub"));
+            e.to_enum(&mut scope);
         }
 
         scope.to_string()
     }
 
-    pub fn generate_enums(&mut self) -> String {
+    pub fn generate_enums(&self) -> String {
         let mut scope = Scope::new();
 
         scope.import("url", "Url");
         scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
 
-        for (_n, e) in &mut self.enums {
-            e.vis("pub");
-
-            scope.push_enum(*e);
+        for (_n, e) in &self.enums {
+            e.to_enum(&mut scope);
         }
 
         scope.to_string()
