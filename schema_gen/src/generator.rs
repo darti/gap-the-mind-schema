@@ -96,7 +96,9 @@ impl Generation {
     }
 
     fn get_union(&mut self, types: &Vec<(&str, &str)>) -> String {
-        if types.len() == 1 {
+        if types.is_empty() {
+            String::from("()")
+        } else if types.len() == 1 {
             types.first().unwrap().1.to_string()
         } else {
             let name = types.iter().map(|e| e.0).join("Or");
