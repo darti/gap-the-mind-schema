@@ -26,4 +26,9 @@ fn main() {
         out.join("unions").with_extension("rs"),
         gen.generate_unions(),
     );
+
+    let _u = fs::write(
+        out.join("traits").with_extension("rs"),
+        gen.generate_traits(),
+    );
 }

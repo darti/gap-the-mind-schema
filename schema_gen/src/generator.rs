@@ -1,6 +1,6 @@
 use crate::utils::escape;
 use crate::{DefType, Definition, Schema};
-use codegen::{Enum, Field, Scope, Struct};
+use codegen::{Enum, Field, Function, Scope, Struct, Trait};
 use convert_case::{Case, Casing};
 use itertools::{Either, Itertools};
 use std::collections::HashMap;
@@ -52,6 +52,20 @@ impl Entity {
             let mut f = Field::new(&p.name, &p.ty);
             f.doc(p.doc.lines().collect());
             s.push_field(f);
+        }
+
+        s
+    }
+
+    fn to_trait<'a>(&self, scope: &'a mut Scope) -> &'a mut Trait {
+        let mut name = self.name.to_owned();
+        name.push_str("Like");
+        let s = scope.new_trait(&name).vis("pub");
+        s.doc(&self.doc);
+
+        for p in &self.props {
+            let f = s.new_fn(&p.name.to_case(Case::Snake));
+            f.ret(&p.ty).doc(&p.doc);
         }
 
         s
@@ -187,6 +201,21 @@ impl Generation {
 
         for (_n, e) in &self.objects {
             e.to_struct(&mut scope);
+        }
+
+        scope.to_string()
+    }
+
+    pub fn generate_traits(&self) -> String {
+        let mut scope = Scope::new();
+
+        scope.import("url", "Url");
+        scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
+        scope.import("crate::enums", "*");
+        scope.import("crate::unions", "*");
+
+        for (_n, e) in &self.objects {
+            e.to_trait(&mut scope);
         }
 
         scope.to_string()
