@@ -6,9 +6,6 @@ use std::fmt::Formatter;
 use url::Url;
 
 const DATA_TYPE: &str = "schema:DataType";
-const CLASS_TYPE: &str = "rdfs:Class";
-
-const ENUM_TYPE: &str = "schema:Enumeration";
 const PROPERTY_TYPE: &str = "rdf:Property";
 
 const DATA_TYPES: [&str; 7] = [
@@ -95,21 +92,13 @@ impl Definition {
 pub enum DefType<'a> {
     Primitive(&'a Definition),
     Property(&'a Definition),
-    EnumMember(&'a Definition),
-    Struct(&'a Definition),
-    Enum(&'a Definition),
+    Object(&'a Definition),
 }
 
 impl<'a> From<&'a Definition> for DefType<'a> {
     fn from(d: &'a Definition) -> Self {
         if DATA_TYPES.contains(&&d.id.as_ref()) {
             return DefType::Primitive(d);
-        }
-
-        for t in d.parent_types() {
-            if t == ENUM_TYPE {
-                return DefType::Enum(d);
-            }
         }
 
         for t in d.ty.into_iter() {
@@ -120,7 +109,7 @@ impl<'a> From<&'a Definition> for DefType<'a> {
             }
         }
 
-        DefType::Struct(d)
+        DefType::Object(d)
     }
 }
 

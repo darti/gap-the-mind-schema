@@ -1,6 +1,6 @@
 use crate::utils::escape;
 use crate::{DefType, Definition, Schema};
-use codegen::{Enum, Scope, Struct};
+use codegen::{Enum, Field, Scope, Struct};
 use convert_case::{Case, Casing};
 use itertools::{Either, Itertools};
 use std::collections::HashMap;
@@ -15,6 +15,7 @@ struct Entity {
     name: String,
     doc: String,
     props: Vec<Prop>,
+    connections: Vec<Prop>,
 }
 
 impl Entity {
@@ -23,11 +24,20 @@ impl Entity {
             name: name.to_string(),
             doc: String::default(),
             props: Vec::new(),
+            connections: Vec::new(),
         }
     }
 
     fn add_prop(&mut self, name: &str, doc: &Option<String>, ty: &str) {
         self.props.push(Prop {
+            name: name.to_string(),
+            doc: doc.as_deref().unwrap_or("tot").to_string(),
+            ty: ty.to_string(),
+        })
+    }
+
+    fn add_connection(&mut self, name: &str, doc: &Option<String>, ty: &str) {
+        self.connections.push(Prop {
             name: name.to_string(),
             doc: doc.as_deref().unwrap_or("").to_string(),
             ty: ty.to_string(),
@@ -39,7 +49,9 @@ impl Entity {
         s.doc(&self.doc);
 
         for p in &self.props {
-            s.field(&p.name, &p.ty).doc(&p.doc);
+            let mut f = Field::new(&p.name, &p.ty);
+            f.doc(p.doc.lines().collect());
+            s.push_field(f);
         }
 
         s
@@ -69,28 +81,20 @@ impl Entity {
 }
 
 pub struct Generation {
-    structs: HashMap<String, Entity>,
-    enums: HashMap<String, Entity>,
+    objects: HashMap<String, Entity>,
     unions: HashMap<String, Entity>,
 }
 
 impl Generation {
     pub fn new() -> Self {
         Generation {
-            structs: HashMap::default(),
-            enums: HashMap::default(),
+            objects: HashMap::default(),
             unions: HashMap::default(),
         }
     }
 
-    fn get_struct(&mut self, name: &str) -> &mut Entity {
-        self.structs
-            .entry(name.to_string())
-            .or_insert_with(|| Entity::new(name))
-    }
-
-    fn get_enum(&mut self, name: &str) -> &mut Entity {
-        self.enums
+    fn get_object(&mut self, name: &str) -> &mut Entity {
+        self.objects
             .entry(name.to_string())
             .or_insert_with(|| Entity::new(name))
     }
@@ -121,27 +125,13 @@ impl Generation {
             match df {
                 DefType::Primitive(_d) => {}
                 DefType::Property(d) => self.create_property(d),
-                DefType::Struct(d) => {
+                DefType::Object(d) => {
                     let name = escape(d.label.to_string().as_str());
-                    let mut e = self.get_struct(&name);
+                    let mut e = self.get_object(&name);
 
                     if let Some(c) = d.doc() {
                         e.doc = c;
                     }
-                }
-                DefType::Enum(d) => {
-                    let name = escape(d.label.to_string().as_str());
-                    let e = self.get_enum(&name);
-
-                    if let Some(c) = d.doc() {
-                        e.doc = c;
-                    }
-                }
-                DefType::EnumMember(d) => {
-                    let parent = escape(d.ty.into_iter().next().unwrap());
-
-                    self.get_enum(&parent)
-                        .add_prop(&d.label.to_string(), &d.doc(), "");
                 }
             }
         }
@@ -175,14 +165,14 @@ impl Generation {
 
         for t in d.domains() {
             let target = escape(t);
-            let target = self.get_struct(&target);
+            let target = self.get_object(&target);
 
             if has_simple {
                 target.add_prop(&label, &d.doc(), &simple_ty);
             }
 
             if has_complex {
-                target.add_prop(&label, &d.doc(), &complex_ty);
+                target.add_connection(&label, &d.doc(), &complex_ty);
             }
         }
     }
@@ -195,7 +185,7 @@ impl Generation {
         scope.import("crate::enums", "*");
         scope.import("crate::unions", "*");
 
-        for (_n, e) in &self.structs {
+        for (_n, e) in &self.objects {
             e.to_struct(&mut scope);
         }
 
@@ -223,9 +213,9 @@ impl Generation {
         scope.import("url", "Url");
         scope.import("chrono", "{Date, DateTime, NaiveTime, Utc}");
 
-        for (_n, e) in &self.enums {
-            e.to_enum(&mut scope);
-        }
+        // for (_n, e) in &self.enums {
+        //     e.to_enum(&mut scope);
+        // }
 
         scope.to_string()
     }
